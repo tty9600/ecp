@@ -1,0 +1,77 @@
+/* @file: salsa20.h
+ * #desc:
+ *    The definitions of salsa20 stream encryption.
+ *
+ * #copy:
+ *    Copyright (C) 2026 - Alex Chen <chenalex.cy@gmail.com>
+ *
+ *    This library is free software; you can redistribute it and/or
+ *    modify it under the terms of the GNU Lesser General Public
+ *    License as published by the Free Software Foundation; either
+ *    version 2.1 of the License, or (at your option) any later version.
+ *
+ *    This library is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *    Lesser General Public License for more details.
+ *
+ *    You should have received a copy of the GNU Lesser General Public
+ *    License along with this library; if not,
+ *    see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef _ECP_SALSA20_H
+#define _ECP_SALSA20_H
+
+#include <ecp/config.h>
+#include <ecp/c/stddef.h>
+#include <ecp/c/stdint.h>
+
+#define SALSA20_KEY_LEN 32
+#define SALSA20_RAN_LEN 8
+#define SALSA20_CTR_LEN 8
+#define XSALSA20_RAN_LEN 24
+#define XSALSA20_CTR_LEN 8
+
+#define SALSA20_ROUNDS 20
+#define SALSA20_BLOCKSIZE 64
+
+struct salsa20_ctx {
+	uint32_t state[16];
+	union {
+		uint32_t state[16];
+		uint8_t keystream[SALSA20_BLOCKSIZE];
+	} out;
+};
+
+#define SALSA20_NEW(x) struct salsa20_ctx x
+
+#define SALSA20_COUNT0(x) ((x)->state[8])
+#define SALSA20_COUNT1(x) ((x)->state[9])
+#define SALSA20_KEYSTREAM(x, n) ((x)->out.keystream[n])
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* salsa20.c */
+extern
+void ecp_salsa20_init(struct salsa20_ctx *ctx, const uint8_t *key,
+		const uint8_t *ran, const uint8_t *ctr)
+;
+extern
+void ecp_xsalsa20_init(struct salsa20_ctx *ctx, const uint8_t *key,
+		const uint8_t *ran, const uint8_t *ctr)
+;
+extern
+void ecp_salsa20_block(struct salsa20_ctx *ctx)
+;
+extern
+void ecp_salsa20_crypto(struct salsa20_ctx *ctx, uint8_t *buf, size_t len)
+;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

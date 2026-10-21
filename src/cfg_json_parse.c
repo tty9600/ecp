@@ -1,0 +1,870 @@
+/* @file: cfg_json_parse.c
+ * #desc:
+ *    The implementations of json (javascript object notation) parser.
+ *
+ * #copy:
+ *    Copyright (C) 2026 - Alex Chen <chenalex.cy@gmail.com>
+ *
+ *    This library is free software; you can redistribute it and/or
+ *    modify it under the terms of the GNU Lesser General Public
+ *    License as published by the Free Software Foundation; either
+ *    version 2.1 of the License, or (at your option) any later version.
+ *
+ *    This library is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *    Lesser General Public License for more details.
+ *
+ *    You should have received a copy of the GNU Lesser General Public
+ *    License along with this library; if not,
+ *    see <https://www.gnu.org/licenses/>.
+ */
+
+#include <ecp/config.h>
+#include <ecp/c/stddef.h>
+#include <ecp/c/stdint.h>
+#include <ecp/c/string.h>
+#include <ecp/c/ctype.h>
+#include <ecp/cfg_json.h>
+
+// [
+//   // Comment
+//   {/* Comment */},
+//   // Comment
+//   [],
+//   { /* Comment */
+//     ""/* Comment */: /* Comment */123,
+//     "": 123.123,/* Comment */
+//     /* Comment */"": .123,
+//     "": -12, // Comment
+//     "": "",
+//     "": {},
+//     "": [],
+//     "": true,
+//     "": -123e12,
+//     "": 3.14e+10,
+//     "": 123,
+//     "": Infinity,
+//     "": NaN,
+//     "": {
+//       "": "Hello, World",
+//       "": "",
+//       "": [ 123, +1, +0xf, -NaN, 1e1, .12e-1 ]
+//     },
+//   },
+//   [ 123, /* Comment */"", true, false, null, {}, [ 1, 2, "", {},
+//   /* Comment */1.2 /* Comment */, "\u1234123\t\""], ],
+//   [],
+// ]
+
+/*
+ * escape character:
+ *  \"      quotation mark character
+ *  \'      !! apostrophe character
+ *  \\      reverse solidus characte
+ *  \/      solidus character
+ *  \b      backspace character
+ *  \f      form feed character
+ *  \n      line feed character
+ *  \r      carriage return character
+ *  \t      character tabulation character
+ *  \<any>  !! return the any-self character
+ *  \uXXXX  4 hexadecimal digits unicode
+ */
+
+struct json_ctx {
+	const char *str;
+	int32_t len;
+	int32_t err;
+	void *arg;
+	/* type, string, length, arg */
+	int32_t (*call)(int32_t, const char *, int32_t, void *);
+};
+
+enum {
+	TOKEN_ARRAY = 1,
+	TOKEN_ARRAY_END,
+	TOKEN_OBJECT,
+	TOKEN_OBJECT_END,
+	TOKEN_KEYVAL,
+	TOKEN_NEXT,
+	TOKEN_STRING,
+	TOKEN_NUMBER,
+	TOKEN_NULL,
+	TOKEN_TRUE,
+	TOKEN_FALSE,
+	TOKEN_COMMENT
+};
+
+#define SKIP_CHAR(x) \
+	((x) == ' ' || (x) == '\n' || (x) == '\t' || (x) == '\r')
+#define INVALID_CHAR(x) ((uint8_t)(x) < 0x20)
+
+static int32_t _json_object(struct json_ctx *ctx);
+static int32_t _json_array(struct json_ctx *ctx);
+
+/* @func: _json_token (static)
+ * #desc:
+ *    get the json token.
+ *
+ * #1: c [in]  character
+ * #r:   [ret] token value (-1: unknown token)
+ */
+static int32_t _json_token(char c)
+{
+	switch (c) {
+		case '[':
+			return TOKEN_ARRAY;
+		case ']':
+			return TOKEN_ARRAY_END;
+		case '{':
+			return TOKEN_OBJECT;
+		case '}':
+			return TOKEN_OBJECT_END;
+		case ',':
+			return TOKEN_NEXT;
+		case ':':
+			return TOKEN_KEYVAL;
+		case '"':
+		case '\'':
+			return TOKEN_STRING;
+		case 'n':
+			return TOKEN_NULL;
+		case 't':
+			return TOKEN_TRUE;
+		case 'f':
+			return TOKEN_FALSE;
+		case '/':
+			return TOKEN_COMMENT;
+		default:
+			if (c == '+' || c == '-') {
+				return TOKEN_NUMBER;
+			} else if (c >= '0' && c <= '9') {
+				return TOKEN_NUMBER;
+			} else if (c == '.') {
+				return TOKEN_NUMBER;
+			} else if (c == 'I' || c == 'N') {
+				return TOKEN_NUMBER;
+			}
+			return -1;
+	}
+
+	return -1;
+}
+
+/* @func: _json_string (static)
+ * #desc:
+ *    get the length of the json string.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    string length (-1: error)
+ */
+static int32_t _json_string(struct json_ctx *ctx)
+{
+	int32_t st = 0, len = ctx->len;
+	char cc;
+
+	for (; *ctx->str != '\0'; ctx->str++, ctx->len++) {
+		char c = *ctx->str;
+		switch (st) {
+			case 0: /* begin */
+				if (c != '"')
+					return -1;
+				cc = c;
+				st = 1;
+				break;
+			case 1:
+				if (c == cc) { /* end */
+					ctx->str++;
+					ctx->len++;
+					return ctx->len - len;
+				} else if (c == '\\') { /* escape */
+					st = 2;
+				}
+				if (INVALID_CHAR(c))
+					return -1;
+				break;
+			case 2: /* escape */
+				st = 1;
+				break;
+			default:
+				return -1;
+		}
+	}
+
+	return -1;
+}
+
+/* @func: _json_number (static)
+ * #desc:
+ *    get the length of the json number.
+ *
+ * #1: ctx  [in/out] json struct context
+ * #2: type [out]    number type
+ * #r:      [ret]    number length (-1: error)
+ */
+static int32_t _json_number(struct json_ctx *ctx, int32_t *type)
+{
+	int32_t st = 0, len = ctx->len;
+
+	for (; *ctx->str != '\0'; ctx->str++, ctx->len++) {
+		char c = *ctx->str;
+		switch (st) {
+			case 0: /* begin */
+				if (c == '+' || c == '-') {
+					st = 1;
+					break;
+				}
+			case 1:
+				if (c == 'I' || c == 'N') {
+					st = 9;
+					break;
+				} else if (c == '.') {
+					st = 5;
+					break;
+				} else if (ecp_isdigit(c)) {
+					st = 2;
+					break;
+				}
+				return -1;
+			case 2:
+				if (c == 'X' || c == 'x') {
+					st = 3;
+					break;
+				} else if (c == '.') {
+					st = 5;
+					break;
+				} else if (c == 'E' || c == 'e') {
+					st = 6;
+					break;
+				} else if (ecp_isdigit(c)) {
+					st = 4;
+					break;
+				}
+
+				*type = JSON_NUMBER_DEC_TYPE;
+				return ctx->len - len;
+			case 3: /* hexadecimal */
+				if (ecp_isxdigit(c))
+					break;
+
+				*type = JSON_NUMBER_HEX_TYPE;
+				return ctx->len - len;
+			case 4: /* decimal, floating, or exponent */
+				if (c == '.') {
+					st = 5;
+					break;
+				} else if (c == 'E' || c == 'e') {
+					st = 6;
+					break;
+				} else if (ecp_isdigit(c)) {
+					break;
+				}
+
+				*type = JSON_NUMBER_DEC_TYPE;
+				return ctx->len - len;
+			case 5: /* floating */
+				if (c == 'E' || c == 'e') {
+					st = 6;
+					break;
+				} else if (ecp_isdigit(c)) {
+					break;
+				}
+
+				*type = JSON_NUMBER_FLT_TYPE;
+				return ctx->len - len;
+			case 6: /* '+-' exponent */
+				if (c == '+' || c == '-') {
+					st = 7;
+					break;
+				}
+			case 7:
+				if (ecp_isdigit(c)) {
+					st = 8;
+					break;
+				}
+				return -1;
+			case 8:
+				if (ecp_isdigit(c))
+					break;
+
+				*type = JSON_NUMBER_FLT_TYPE;
+				return ctx->len - len;
+			case 9: /* Infinity and NaN */
+				ctx->str--;
+				ctx->len--;
+				if (!ecp_strncmp("Infinity", ctx->str, 8)) {
+					ctx->str += 8;
+					ctx->len += 8;
+					*type = JSON_NUMBER_INF_TYPE;
+					return ctx->len - len;
+				}
+				if (!ecp_strncmp("NaN", ctx->str, 3)) {
+					ctx->str += 3;
+					ctx->len += 3;
+					*type = JSON_NUMBER_NAN_TYPE;
+					return ctx->len - len;
+				}
+				return -1;
+			default:
+				return -1;
+		}
+	}
+
+	return -1;
+}
+
+/* @func: _json_null (static)
+ * #desc:
+ *    get the length of the json null.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    null length (-1: error)
+ */
+static int32_t _json_null(struct json_ctx *ctx)
+{
+	if (!ecp_strncmp("null", ctx->str, 4)) {
+		ctx->str += 4;
+		ctx->len += 4;
+		return 4;
+	}
+
+	return -1;
+}
+
+/* @func: _json_true (static)
+ * #desc:
+ *    get the length of the json true.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    true length (-1: error)
+ */
+static int32_t _json_true(struct json_ctx *ctx)
+{
+	if (!ecp_strncmp("true", ctx->str, 4)) {
+		ctx->str += 4;
+		ctx->len += 4;
+		return 4;
+	}
+
+	return -1;
+}
+
+/* @func: _json_false (static)
+ * #desc:
+ *    get the length of the json false.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    false length (-1: error)
+ */
+static int32_t _json_false(struct json_ctx *ctx)
+{
+	if (!ecp_strncmp("false", ctx->str, 5)) {
+		ctx->str += 5;
+		ctx->len += 5;
+		return 5;
+	}
+
+	return -1;
+}
+
+/* @func: _json_comment (static)
+ * #desc:
+ *    get the length of the json comments.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    comment length (-1: error)
+ */
+static int32_t _json_comment(struct json_ctx *ctx)
+{
+	int32_t st = 0, len = ctx->len;
+
+	if (!ecp_strncmp("//", ctx->str, 2)) {
+		ctx->str += 2;
+		ctx->len += 2;
+		for (; *ctx->str != '\0'; ctx->str++, ctx->len++) {
+			if (*ctx->str == '\n') {
+				ctx->str++;
+				ctx->len++;
+				break;
+			}
+		}
+		return ctx->len - len;
+	}
+
+	if (!ecp_strncmp("/*", ctx->str, 2)) {
+		ctx->str += 2;
+		ctx->len += 2;
+		for (; *ctx->str != '\0'; ctx->str++, ctx->len++) {
+			char c = *ctx->str;
+			switch (st) {
+				case 0:
+					if (c == '*')
+						st = 1;
+					break;
+				case 1:
+					if (c == '/') {
+						ctx->str++;
+						ctx->len++;
+						return ctx->len - len;
+					}
+					st = 0;
+					break;
+				default:
+					return -1;
+			}
+		}
+	}
+
+	return -1;
+}
+
+/* @func: _json_object (static)
+ * #desc:
+ *    parse json object.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    0: no error, -1: error, -2: callback error
+ */
+static int32_t _json_object(struct json_ctx *ctx)
+{
+	int32_t st = 0, ret = 0, type = -1;
+
+	for (; *ctx->str != '\0'; ctx->str++, ctx->len++) {
+		char c = *ctx->str;
+		if (SKIP_CHAR(c))
+			continue;
+		if (INVALID_CHAR(c)) {
+			ctx->err = JSON_ERR_INVALID;
+			return -1;
+		}
+
+		switch (st) {
+			case 0: /* begin '{' */
+				if (ctx->call(JSON_OBJECT_TYPE,
+						NULL,
+						0,
+						ctx->arg))
+					return -2;
+				st = 1;
+				break;
+			case 1:
+				switch (_json_token(c)) {
+					case TOKEN_COMMENT:
+						ret = _json_comment(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_COMMENT;
+							return -1;
+						}
+						ctx->str--;
+						ctx->len--;
+						break;
+					case TOKEN_STRING: /* object key */
+						ret = _json_string(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_OBJECT_KEYVAL;
+							return -1;
+						}
+						if (ctx->call(JSON_KEYVAL_TYPE,
+								ctx->str - ret + 1,
+								ret - 2,
+								ctx->arg))
+							return -2;
+						ctx->str--;
+						ctx->len--;
+						st = 2;
+						break;
+					case TOKEN_OBJECT_END: /* end '}' */
+						if (ctx->call(JSON_OBJECT_END_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						ctx->str++;
+						ctx->len++;
+						return 0;
+					default:
+						ctx->err = JSON_ERR_OBJECT_TOKEN;
+						return -1;
+				}
+				break;
+			case 2: /* ':' */
+				switch (_json_token(c)) {
+					case TOKEN_COMMENT:
+						ret = _json_comment(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_COMMENT;
+							return -1;
+						}
+						ctx->str--;
+						ctx->len--;
+						break;
+					case TOKEN_KEYVAL:
+						st = 3;
+						break;
+					default:
+						ctx->err = JSON_ERR_OBJECT_KEYVAL;
+						return -1;
+				}
+				break;
+			case 3:
+				if (_json_token(c) == TOKEN_COMMENT) {
+					ret = _json_comment(ctx);
+					if (ret < 0) {
+						ctx->err = JSON_ERR_COMMENT;
+						return -1;
+					}
+					ctx->str--;
+					ctx->len--;
+					break;
+				}
+
+				switch (_json_token(c)) {
+					case TOKEN_STRING:
+						ret = _json_string(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_OBJECT_STRING;
+							return -1;
+						}
+						if (ctx->call(JSON_STRING_TYPE,
+								ctx->str - ret + 1,
+								ret - 2,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_NUMBER:
+						ret = _json_number(ctx, &type);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_OBJECT_NUMBER;
+							return -1;
+						}
+						if (ctx->call(type,
+								ctx->str - ret,
+								ret,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_NULL:
+						ret = _json_null(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_OBJECT_TOKEN;
+							return -1;
+						}
+						if (ctx->call(JSON_NULL_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_TRUE:
+						ret = _json_true(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_OBJECT_TOKEN;
+							return -1;
+						}
+						if (ctx->call(JSON_TRUE_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_FALSE:
+						ret = _json_false(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_OBJECT_TOKEN;
+							return -1;
+						}
+						if (ctx->call(JSON_FALSE_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_OBJECT: /* object */
+						ret = _json_object(ctx);
+						if (ret < 0)
+							return ret;
+						break;
+					case TOKEN_ARRAY: /* array */
+						ret = _json_array(ctx);
+						if (ret < 0)
+							return ret;
+						break;
+					default:
+						ctx->err = JSON_ERR_OBJECT_TOKEN;
+						return -1;
+				}
+				ctx->str--;
+				ctx->len--;
+				st = 4;
+				break;
+			case 4: /* next ',' or end '}' */
+				switch (_json_token(c)) {
+					case TOKEN_COMMENT:
+						ret = _json_comment(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_COMMENT;
+							return -1;
+						}
+						ctx->str--;
+						ctx->len--;
+						break;
+					case TOKEN_NEXT:
+						st = 1;
+						break;
+					case TOKEN_OBJECT_END:
+						if (ctx->call(JSON_OBJECT_END_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						ctx->str++;
+						ctx->len++;
+						return 0;
+					default:
+						ctx->err = JSON_ERR_OBJECT_END;
+						return -1;
+				}
+				break;
+			default:
+				return -1;
+		}
+	}
+
+	return -1;
+}
+
+/* @func: _json_array (static)
+ * #desc:
+ *    parse json array.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    0: no error, -1: error, -2: callback error
+ */
+static int32_t _json_array(struct json_ctx *ctx)
+{
+	int32_t st = 0, ret = 0, type = -1;
+
+	for (; *ctx->str != '\0'; ctx->str++, ctx->len++) {
+		char c = *ctx->str;
+		if (SKIP_CHAR(c))
+			continue;
+		if (INVALID_CHAR(c)) {
+			ctx->err = JSON_ERR_INVALID;
+			return -1;
+		}
+
+		switch (st) {
+			case 0: /* begin '[' */
+				if (ctx->call(JSON_ARRAY_TYPE,
+						NULL,
+						0,
+						ctx->arg))
+					return -2;
+				st = 1;
+				break;
+			case 1:
+				if (_json_token(c) == TOKEN_COMMENT) {
+					ret = _json_comment(ctx);
+					if (ret < 0) {
+						ctx->err = JSON_ERR_COMMENT;
+						return -1;
+					}
+					ctx->str--;
+					ctx->len--;
+					break;
+				}
+
+				switch (_json_token(c)) {
+					case TOKEN_STRING:
+						ret = _json_string(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_ARRAY_STRING;
+							return -1;
+						}
+						if (ctx->call(JSON_STRING_TYPE,
+								ctx->str - ret + 1,
+								ret - 2,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_NUMBER:
+						ret = _json_number(ctx, &type);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_ARRAY_NUMBER;
+							return -1;
+						}
+						if (ctx->call(type,
+								ctx->str - ret,
+								ret,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_NULL:
+						ret = _json_null(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_ARRAY_TOKEN;
+							return -1;
+						}
+						if (ctx->call(JSON_NULL_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_TRUE:
+						ret = _json_true(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_ARRAY_TOKEN;
+							return -1;
+						}
+						if (ctx->call(JSON_TRUE_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_FALSE:
+						ret = _json_false(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_ARRAY_TOKEN;
+							return -1;
+						}
+						if (ctx->call(JSON_FALSE_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						break;
+					case TOKEN_OBJECT: /* object */
+						ret = _json_object(ctx);
+						if (ret < 0)
+							return ret;
+						break;
+					case TOKEN_ARRAY: /* array */
+						ret = _json_array(ctx);
+						if (ret < 0)
+							return ret;
+						break;
+					case TOKEN_ARRAY_END: /* end */
+						if (ctx->call(JSON_ARRAY_END_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						ctx->str++;
+						ctx->len++;
+						return 0;
+					default:
+						ctx->err = JSON_ERR_ARRAY_TOKEN;
+						return -1;
+				}
+				ctx->str--;
+				ctx->len--;
+				st = 2;
+				break;
+			case 2: /* next ',' or end ']' */
+				switch (_json_token(c)) {
+					case TOKEN_COMMENT:
+						ret = _json_comment(ctx);
+						if (ret < 0) {
+							ctx->err = JSON_ERR_COMMENT;
+							return -1;
+						}
+						ctx->str--;
+						ctx->len--;
+						break;
+					case TOKEN_NEXT:
+						st = 1;
+						break;
+					case TOKEN_ARRAY_END:
+						if (ctx->call(JSON_ARRAY_END_TYPE,
+								NULL,
+								0,
+								ctx->arg))
+							return -2;
+						ctx->str++;
+						ctx->len++;
+						return 0;
+					default:
+						ctx->err = JSON_ERR_ARRAY_END;
+						return -1;
+				}
+				break;
+			default:
+				return -1;
+		}
+	}
+
+	return -1;
+}
+
+/* @func: _json_parse (static)
+ * #desc:
+ *    json begin parse.
+ *
+ * #1: ctx [in/out] json struct context
+ * #r:     [ret]    0: no error, -1: error, -2: callback error
+ */
+static int32_t _json_parse(struct json_ctx *ctx)
+{
+	int32_t ret;
+
+	for (; *ctx->str != '\0'; ctx->str++, ctx->len++) {
+		char c = *ctx->str;
+		if (SKIP_CHAR(c))
+			continue;
+		if (INVALID_CHAR(c)) {
+			ctx->err = JSON_ERR_INVALID;
+			return -1;
+		}
+
+		switch (_json_token(c)) {
+			case TOKEN_COMMENT:
+				ret = _json_comment(ctx);
+				if (ret < 0) {
+					ctx->err = JSON_ERR_COMMENT;
+					return -1;
+				}
+				ctx->str--;
+				ctx->len--;
+				break;
+			case TOKEN_OBJECT:
+				return _json_object(ctx);
+			case TOKEN_ARRAY:
+				return _json_array(ctx);
+			default:
+				ctx->err = JSON_ERR_START_TOKEN;
+				return -1;
+		}
+	}
+
+	return 0;
+}
+
+/* @func: ecp_json_parse
+ * #desc:
+ *    json (javascript object notation) parser.
+ *
+ * #1: s       [in]  input string
+ * #2: err_len [out] error location length
+ * #3: err     [out] error code
+ * #4: arg     [in]  callback arg
+ * #5: call    [in]  callback (type, string, length, arg)
+ * #r:         [ret] 0: no error, -1: error, -2: callback error
+ */
+int32_t ecp_json_parse(const char *s, int32_t *err_len, int32_t *err,
+		void *arg,
+		int32_t (*call)(int32_t, const char *, int32_t, void *))
+{
+	struct json_ctx ctx = { s, 0, 0, arg, call };
+
+	int32_t ret = _json_parse(&ctx);
+	if (ret == -1 && *ctx.str == '\0')
+		ctx.err |= JSON_ERR_INCOMP;
+
+	*err_len = ctx.len;
+	*err = ctx.err;
+
+	return ret;
+}

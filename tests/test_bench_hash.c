@@ -1,0 +1,424 @@
+/* @file: test_bench_hash.c
+ * #desc:
+ *
+ * #copy:
+ *    Copyright (C) 2026 - Alex Chen <chenalex.cy@gmail.com>
+ *
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program. If not,
+ *    see <https://www.gnu.org/licenses/>.
+ */
+
+#include <stdio.h>
+#include <time.h>
+#include <ecp/c/stdint.h>
+#include <ecp/md5.h>
+#include <ecp/sha1.h>
+#include <ecp/sha2.h>
+#include <ecp/sha3.h>
+#include <ecp/blake2.h>
+#include <ecp/sm3.h>
+#include <ecp/xxhash.h>
+#include <ecp/poly1305.h>
+#include <ecp/ghash.h>
+#include <ecp/siphash.h>
+
+static uint8_t g_buf[1 << 20];
+
+void test_md5(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	MD5_NEW(ctx);
+
+	len = 0;
+	ecp_md5_init(&ctx);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_md5_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_md5_finish(&ctx, len);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("md5: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_sha1(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	SHA1_NEW(ctx);
+
+	len = 0;
+	ecp_sha1_init(&ctx);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sha1_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sha1_finish(&ctx, len);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sha1: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_sha256(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	SHA256_NEW(ctx);
+
+	len = 0;
+	ecp_sha256_init(&ctx);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sha256_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sha256_finish(&ctx, len);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sha256: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_sha512(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	SHA512_NEW(ctx);
+
+	len = 0;
+	ecp_sha512_init(&ctx);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sha512_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sha512_finish(&ctx, len);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sha512: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_sha3(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	SHA3_NEW(ctx);
+
+	len = 0;
+	ecp_sha3_init(&ctx, SHA3_256_TYPE, 0);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sha3_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sha3_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sha3-256: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+
+	len = 0;
+	ecp_sha3_init(&ctx, SHA3_512_TYPE, 0);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sha3_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sha3_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sha3-512: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+
+	len = 0;
+	ecp_sha3_init(&ctx, SHA3_SHAKE128_TYPE, 0);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sha3_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sha3_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sha3-shake128: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+
+	len = 0;
+	ecp_sha3_init(&ctx, SHA3_SHAKE256_TYPE, 0);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sha3_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sha3_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sha3-shake256: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_blake2b(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	BLAKE2B_NEW(ctx);
+
+	len = 0;
+	ecp_blake2b_init(&ctx, BLAKE2B_512_LEN);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_blake2b_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_blake2b_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("blake2b: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_blake2s(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	BLAKE2S_NEW(ctx);
+
+	len = 0;
+	ecp_blake2s_init(&ctx, BLAKE2S_256_LEN);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_blake2s_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_blake2s_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("blake2s: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_sm3(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	SM3_NEW(ctx);
+
+	len = 0;
+	ecp_sm3_init(&ctx);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_sm3_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_sm3_finish(&ctx, len);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("sm3: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_xxhash32(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	XXHASH32_NEW(ctx);
+
+	len = 0;
+	ecp_xxhash32_init(&ctx, 0);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_xxhash32_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_xxhash32_finish(&ctx, len);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("xxh32: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_xxhash64(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	XXHASH64_NEW(ctx);
+
+	len = 0;
+	ecp_xxhash64_init(&ctx, 0);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_xxhash64_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_xxhash64_finish(&ctx, len);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("xxh64: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_poly1305(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	POLY1305_NEW(ctx);
+
+	len = 0;
+	ecp_poly1305_init(&ctx, g_buf);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_poly1305_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_poly1305_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("poly1305: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_ghash(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	GHASH_NEW(ctx);
+
+	len = 0;
+	ecp_ghash_init(&ctx, g_buf);
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_ghash_process(&ctx, g_buf, sizeof(g_buf));
+		len += sizeof(g_buf);
+	}
+	ecp_ghash_finish(&ctx);
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("ghash: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+void test_siphash24(void)
+{
+	clock_t start, end;
+	double time;
+	uint64_t len;
+
+	len = 0;
+
+	start = clock();
+	for (int32_t i = 0; i < 200; i++) {
+		ecp_siphash24(g_buf, sizeof(g_buf), g_buf);
+		len += sizeof(g_buf);
+	}
+	end = clock();
+	time = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("siphash24: %.6f (%.2f MiB/s)\n", time,
+		(len / time) / 1024 / 1024);
+}
+
+int main(void)
+{
+#ifndef NO_MD5
+	test_md5();
+#endif
+#ifndef NO_SHA1
+	test_sha1();
+#endif
+#ifndef NO_SHA2
+# ifndef NO_SHA256
+	test_sha256();
+# endif
+# ifndef NO_SHA512
+	test_sha512();
+# endif
+#endif
+#ifndef NO_SHA3
+	test_sha3();
+#endif
+#ifndef NO_BLAKE2
+# ifndef NO_BLAKE2B
+	test_blake2b();
+# endif
+# ifndef NO_BLAKE2S
+	test_blake2s();
+# endif
+#endif
+#ifndef NO_SM3
+	test_sm3();
+#endif
+#ifndef NO_XXHASH
+# ifndef NO_XXHASH32
+	test_xxhash32();
+# endif
+# ifndef NO_XXHASH64
+	test_xxhash64();
+# endif
+#endif
+#ifndef NO_POLY1305
+	test_poly1305();
+#endif
+#ifndef NO_GHASH
+	test_ghash();
+#endif
+#ifndef NO_SIPHASH24
+	test_siphash24();
+#endif
+
+	return 0;
+}

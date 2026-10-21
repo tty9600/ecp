@@ -1,0 +1,159 @@
+/* @file: stdint.h
+ * #desc:
+ *    The definitions of C integer types.
+ *
+ * #copy:
+ *    Copyright (C) 2026 - Alex Chen <chenalex.cy@gmail.com>
+ *
+ *    This library is free software; you can redistribute it and/or
+ *    modify it under the terms of the GNU Lesser General Public
+ *    License as published by the Free Software Foundation; either
+ *    version 2.1 of the License, or (at your option) any later version.
+ *
+ *    This library is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *    Lesser General Public License for more details.
+ *
+ *    You should have received a copy of the GNU Lesser General Public
+ *    License along with this library; if not,
+ *    see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef _ECP_C_STDINT_H
+#define _ECP_C_STDINT_H
+
+#include <ecp/config.h>
+
+#ifdef ECP_STDINT_TYPEDEF
+ typedef signed char int8_t;
+ typedef signed short int16_t;
+ typedef signed int int32_t;
+ typedef unsigned char uint8_t;
+ typedef unsigned short uint16_t;
+ typedef unsigned int uint32_t;
+#else
+# define int8_t signed char
+# define int16_t signed short
+# define int32_t signed int
+# define uint8_t unsigned char
+# define uint16_t unsigned short
+# define uint32_t unsigned int
+#endif
+
+#undef INT8_MIN
+#undef INT8_MAX
+#undef UINT8_MAX
+#define INT8_MIN (-1 - 0x7f)
+#define INT8_MAX 0x7f
+#define UINT8_MAX 0xff
+
+#undef INT16_MIN
+#undef INT16_MAX
+#undef UINT16_MAX
+#define INT16_MIN (-1 - 0x7fff)
+#define INT16_MAX 0x7fff
+#define UINT16_MAX 0xffff
+
+#undef INT32_MIN
+#undef INT32_MAX
+#undef UINT32_MAX
+#define INT32_MIN (-1 - 0x7fffffff)
+#define INT32_MAX 0x7fffffff
+#define UINT32_MAX 0xffffffffU
+
+#undef INT64_MIN
+#undef INT64_MAX
+#undef UINT64_MAX
+
+#if defined(ECP_MARCH_BITS_32)
+# ifdef ECP_STDINT_TYPEDEF
+ typedef signed long long int64_t;
+ typedef unsigned long long uint64_t;
+# else
+#  define int64_t signed long long
+#  define uint64_t unsigned long long
+# endif
+# define INT64_MIN (-1LL - 0x7fffffffffffffffLL)
+# define INT64_MAX 0x7fffffffffffffffLL
+# define UINT64_MAX 0xffffffffffffffffULL
+#elif defined(ECP_MARCH_BITS_64)
+# ifdef ECP_STDINT_TYPEDEF
+ typedef signed long int64_t;
+ typedef unsigned long uint64_t;
+# else
+#  define int64_t signed long
+#  define uint64_t unsigned long
+# endif
+# define INT64_MIN (-1L - 0x7fffffffffffffffL)
+# define INT64_MAX 0x7fffffffffffffffL
+# define UINT64_MAX 0xffffffffffffffffUL
+#else
+# error "!!!unknown machine bits!!!"
+#endif
+
+#ifdef ECP_STDINT_TYPEDEF
+ typedef signed long int intptr_t;
+ typedef unsigned long int uintptr_t;
+#else
+# define intptr_t signed long int
+# define uintptr_t unsigned long int
+#endif
+
+#undef INTPTR_MIN
+#undef INTPTR_MAX
+#undef UINTPTR_MAX
+#undef PTRDIFF_MIN
+#undef PTRDIFF_MAX
+#undef SIZE_MAX
+#undef SSIZE_MIN
+#undef SSIZE_MAX
+#if defined(ECP_MARCH_BITS_32)
+# define INTPTR_MIN INT32_MIN
+# define INTPTR_MAX INT32_MAX
+# define UINTPTR_MAX UINT32_MAX
+# define PTRDIFF_MIN INT32_MIN
+# define PTRDIFF_MAX INT32_MAX
+# define SIZE_MAX UINT32_MAX
+# define SSIZE_MIN INT32_MIN
+# define SSIZE_MAX INT32_MAX
+#elif defined(ECP_MARCH_BITS_64)
+# define INTPTR_MIN INT64_MIN
+# define INTPTR_MAX INT64_MAX
+# define UINTPTR_MAX UINT64_MAX
+# define PTRDIFF_MIN INT64_MIN
+# define PTRDIFF_MAX INT64_MAX
+# define SIZE_MAX UINT64_MAX
+# define SSIZE_MIN INT64_MIN
+# define SSIZE_MAX INT64_MAX
+#else
+# error "!!!unknown machine bits!!!"
+#endif
+
+#undef INT8_C
+#undef INT16_C
+#undef INT32_C
+#define INT8_C(x) x
+#define INT16_C(x) x
+#define INT32_C(x) x
+
+#undef UINT8_C
+#undef UINT16_C
+#undef UINT32_C
+#define UINT8_C(x) x
+#define UINT16_C(x) x
+#define UINT32_C(x) x##U
+
+#undef INT64_C
+#undef UINT64_C
+#if defined(ECP_MARCH_BITS_32)
+# define INT64_C(x) x##LL
+# define UINT64_C(x) x##ULL
+#elif defined(ECP_MARCH_BITS_64)
+# define INT64_C(x) x##L
+# define UINT64_C(x) x##UL
+#else
+# error "!!!unknown machine bits!!!"
+#endif
+
+#endif

@@ -1,0 +1,71 @@
+The ECP (Example C Program) project is a implementation library written in
+accordance with the ISO/C99 standard.  Its main features are high cohesion
+and low coupling.
+
+Includes
+
+ util_gzip
+ util_ungz
+ util_bzip2
+ util_unbzip2
+ util_totp
+ util_entropy
+ simple_bwt
+
+ C-Runtime
+ C-Soft (with SoftFloat)
+ AVL-Tree
+ RB-Tree
+ Linked-list
+ Swiss-Table (gomap)
+ KFIFO
+ AES (ECB/CBC/CFB/OFB/CTR/GCM)
+ DES
+ RC4
+ Blowfish
+ ChaCha20 (with XChaCha20)
+ Salsa20 (with XSalsa20)
+ Bits stream (get/add/msb/lsb)
+ Base coding (16/32/64)
+ INI
+ JSON
+ BigNumber (4352/6400/8448)
+ Blake2b
+ Blake2s
+ MD5
+ SHA1
+ SHA2 (224/256/384/512)
+ SHA3 (224/256/384/512/Shake128/Shake256/xof)
+ SM3
+ HMAC (Blake2b, Blake2s, MD5, SHA1, SHA2, SHA3, SM3)
+ HKDF (Blake2b, Blake2s, MD5, SHA1, SHA2, SHA3, SM3)
+ PBKDF2 (Blake2b, Blake2s, SHA1, SHA2, SHA3, SM3)
+ TOTP (SHA1, SHA256, SHA512)
+ Bcrypt
+ Scrypt
+ SipHash24 (with x24)
+ Poly1305
+ GHASH
+ xxHash (32/64)
+ CRC (16/32/64)
+ Deflate
+ Inflate
+ Bzip2
+ UnBzip2
+ RSA (2048/3072/4096)
+ Curve25519
+ Curve448
+ NIST-P256
+ NIST-P384
+ NIST-P521
+ ML-KEM (512/768/1024)
+ ML-DSA (44/65/87)
+
+Third-part
+
+ linux-6.2-uapi
+
+Licenses
+
+ LGPL-2.1
+ GPL-3.0
